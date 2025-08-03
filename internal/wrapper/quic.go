@@ -12,7 +12,8 @@ import (
 	"net"
 	"strings"
 
-	"github.com/lucas-clemente/quic-go"
+	//"github.com/lucas-clemente/quic-go"
+	"github.com/quic-go/quic-go"
 )
 
 // Config represents the configuration of a Quic session

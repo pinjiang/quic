@@ -3,7 +3,8 @@ package wrapper
 import (
 	"time"
 
-	quic "github.com/lucas-clemente/quic-go"
+	//quic "github.com/lucas-clemente/quic-go"
+	quic "github.com/quic-go/quic-go"
 )
 
 // WritableStream represents a wrapped quic-go SendStream
