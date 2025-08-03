@@ -1,5 +1,5 @@
-// Package wrapper is a wrapper around lucas-clemente/quic-go to match
-// the net.Conn based interface used troughout pion/webrtc.
+// Package wrapper is a wrapper around quic-go to match
+// the net.Conn based interface used throughout pion/webrtc.
 package wrapper
 
 import (
@@ -11,8 +11,8 @@ import (
 	"io"
 	"net"
 	"strings"
+	"time"
 
-	//"github.com/lucas-clemente/quic-go"
 	"github.com/quic-go/quic-go"
 )
 
@@ -25,11 +25,11 @@ type Config struct {
 
 func getDefaultQuicConfig() *quic.Config {
 	return &quic.Config{
-		MaxIncomingStreams:                    1000,
-		MaxIncomingUniStreams:                 1000,
-		MaxReceiveStreamFlowControlWindow:     3 * (1 << 20),   // 3 MB
-		MaxReceiveConnectionFlowControlWindow: 4.5 * (1 << 20), // 4.5 MB
-		KeepAlive:                             true,
+		MaxIncomingStreams:         1000,
+		MaxIncomingUniStreams:      1000,
+		MaxStreamReceiveWindow:     3 * (1 << 20),   // 3 MB
+		MaxConnectionReceiveWindow: 4.5 * (1 << 20), // 4.5 MB
+		KeepAlivePeriod:            15 * time.Second,
 	}
 }
 
@@ -42,7 +42,10 @@ func Client(conn net.Conn, config *Config) (*Session, error) {
 		return nil, errClientWithoutRemoteAddress
 	}
 
-	s, err := quic.Dial(newFakePacketConn(conn), rAddr, rAddr.String(), getTLSConfig(config), getDefaultQuicConfig())
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	s, err := quic.Dial(ctx, newFakePacketConn(conn), rAddr, getTLSConfig(config), getDefaultQuicConfig())
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +54,10 @@ func Client(conn net.Conn, config *Config) (*Session, error) {
 
 // Dial dials the address over quic
 func Dial(addr string, config *Config) (*Session, error) {
-	s, err := quic.DialAddr(addr, getTLSConfig(config), getDefaultQuicConfig())
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	s, err := quic.DialAddr(ctx, addr, getTLSConfig(config), getDefaultQuicConfig())
 	if err != nil {
 		return nil, err
 	}
@@ -93,7 +99,7 @@ func getTLSConfig(config *Config) *tls.Config {
 
 // A Session is a QUIC connection between two peers.
 type Session struct {
-	s quic.Session
+	s *quic.Conn
 }
 
 // OpenStream opens a new stream
@@ -116,7 +122,10 @@ func (s *Session) OpenUniStream() (*WritableStream, error) {
 
 // AcceptStream accepts an incoming stream
 func (s *Session) AcceptStream() (*Stream, error) {
-	str, err := s.s.AcceptStream(context.TODO())
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	
+	str, err := s.s.AcceptStream(ctx)
 	if err != nil {
 		if strings.HasPrefix(err.Error(), "Application error 0x0") {
 			return nil, nil // Errorcode == 0 implies session is closed without error
@@ -128,7 +137,10 @@ func (s *Session) AcceptStream() (*Stream, error) {
 
 // AcceptUniStream accepts an incoming unidirectional stream and returns a ReadableStream
 func (s *Session) AcceptUniStream() (*ReadableStream, error) {
-	str, err := s.s.AcceptUniStream(context.TODO())
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	
+	str, err := s.s.AcceptUniStream(ctx)
 	if err != nil {
 		if strings.HasPrefix(err.Error(), "Application error 0x0") {
 			return nil, nil // Errorcode == 0 implies session is closed without error
@@ -140,7 +152,7 @@ func (s *Session) AcceptUniStream() (*ReadableStream, error) {
 
 // GetRemoteCertificates returns the certificate chain presented by remote peer.
 func (s *Session) GetRemoteCertificates() []*x509.Certificate {
-	return s.s.ConnectionState().PeerCertificates
+	return s.s.ConnectionState().TLS.PeerCertificates
 }
 
 // Close the connection
@@ -155,5 +167,5 @@ func (s *Session) CloseWithError(code uint16, err error) error {
 	if err != nil {
 		e = err.Error()
 	}
-	return s.s.CloseWithError(quic.ErrorCode(code), e)
+	return s.s.CloseWithError(quic.ApplicationErrorCode(code), e)
 }
