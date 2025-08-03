@@ -4,7 +4,7 @@ import (
 	"time"
 
 	quic "github.com/lucas-clemente/quic-go"
-	"github.com/pion/quic/internal/wrapper"
+	"github.com/pinjiang/quic/internal/wrapper"
 )
 
 // BidirectionalStream represents a bidirectional Quic stream.
